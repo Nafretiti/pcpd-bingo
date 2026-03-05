@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>PCPD Clickable Bingo</title>
+<style>
+  :root {
+    --bg: #0f1e2e;
+    --card: #17324a;
+    --cardHover: #1f4a6b;
+    --border: rgba(255,255,255,.75);
+    --active: #2ecc71;
+    --activeText: #0b0b0b;
+    --win: #ffd966;
+    --winText: #0b0b0b;
+  }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: #fff;
+    text-align: center;
+  }
+  header {
+    padding: 18px 14px 6px;
+  }
+  h1 {
+    margin: 0 0 6px;
+    font-size: clamp(20px, 3vw, 30px);
+    letter-spacing: .5px;
+  }
+  .sub {
+    margin: 0 auto;
+    max-width: 900px;
+    opacity: .9;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .bar {
+    display:flex;
+    gap:10px;
+    justify-content:center;
+    flex-wrap: wrap;
+    padding: 12px 14px 0;
+  }
+  button {
+    background: transparent;
+    color: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button:hover {
+    background: rgba(255,255,255,.08);
+  }
+  .status {
+    margin: 12px auto 0;
+    display: inline-block;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    font-weight: 800;
+    letter-spacing: .4px;
+  }
+  .status.win {
+    background: var(--win);
+    color: var(--winText);
+    border-color: rgba(0,0,0,.2);
+  }
+  .wrap {
+    padding: 14px 14px 30px;
+  }
+  .grid {
+    width: min(950px, 96vw);
+    margin: 16px auto 0;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .sq {
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    padding: 14px;
+    min-height: clamp(90px, 10vw, 120px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    transition: transform .08s ease, background .15s ease;
+    font-size: clamp(12px, 1.35vw, 14px);
+    line-height: 1.25;
+  }
+  .sq:hover { background: var(--cardHover); transform: translateY(-1px); }
+  .sq.active {
+    background: var(--active);
+    color: var(--activeText);
+    font-weight: 800;
+    border-color: rgba(0,0,0,.25);
+  }
+  .sq.free {
+    background: #caa84b;
+    color: #0b0b0b;
+    font-weight: 900;
+  }
+  .sq.winLine {
+    outline: 4px solid var(--win);
+    outline-offset: 2px;
+  }
+  footer {
+    opacity: .8;
+    font-size: 12px;
+    padding: 0 14px 18px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Paradise City Police Department Bingo</h1>
+  <p class="sub">Click squares to mark them. The center is a FREE SPACE. When you complete a row, column, or diagonal, the board will call <b>BINGO</b> and highlight the winning line.</p>
+  <div class="bar">
+    <button id="resetBtn" type="button">Reset Board</button>
+    <button id="newBtn" type="button">New Card</button>
+    <button id="shareBtn" type="button">Copy Share Text</button>
+  </div>
+  <div id="status" class="status">NO BINGO YET</div>
+</header>
+
+<div class="wrap">
+  <div id="grid" class="grid"></div>
+</div>
+
+<footer>
+  Tip: If you host this file as a webpage (e.g., Google Sites / GitHub Pages / Netlify), everyone can use it from a link with no download.
+</footer>
+
+<script>
+const ALL_ITEMS = ["Radio check with dispatch", "Acknowledge backup request", "Call out traffic stop location", "State reason for the stop", "Run vehicle license plate", "Run driver identification", "Respond en route to call", "Call out arrival on scene", "Clear call over radio", "Request additional unit", "Request EMS assistance", "Request fire assistance", "Provide suspect description", "Call out direction of travel", "Announce vehicle pursuit", "Announce foot pursuit", "Conduct felony traffic stop", "Issue verbal warning", "Issue traffic citation", "Call out scene secure", "Request supervisor on scene", "Coordinate perimeter", "Maintain radio discipline", "Use proper call sign", "Provide scene update", "Answer PCPD phone line", "Log a BOLO update", "Confirm plate return", "Update dispatch with status", "Advise returning to patrol", "Call out vehicle description", "Request tow service", "Conduct a field interview", "Verify registration status", "Run warrants check", "Advise transport start", "Advise transport complete", "Request K9 unit", "Establish command on scene", "Call out evidence collected"];
+const STORAGE_KEY = "pcpd_bingo_v2";
+const GRID_SIZE = 5;
+
+function sampleUnique(arr, n) {
+  const copy = [...arr];
+  // Fisher-Yates partial shuffle
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, n);
+}
+
+function makeCard() {
+  const picks = sampleUnique(ALL_ITEMS, 24);
+  const grid = picks.slice(0, 12).concat(["FREE SPACE"]).concat(picks.slice(12));
+  return grid;
+}
+
+function defaultState() {
+  const card = makeCard();
+  const marks = Array(25).fill(false);
+  marks[12] = true; // free space marked
+  return { card, marks };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.card) || parsed.card.length !== 25) return defaultState();
+    if (!Array.isArray(parsed.marks) || parsed.marks.length !== 25) return defaultState();
+    return parsed;
+  } catch(e) {
+    return defaultState();
+  }
+}
+
+function saveState(state) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function idx(r,c) { return r*GRID_SIZE + c; }
+
+function computeWins(marks) {
+  const wins = [];
+  // rows
+  for (let r=0;r<GRID_SIZE;r++) {
+    const line = [];
+    let ok = true;
+    for (let c=0;c<GRID_SIZE;c++) {
+      const k = idx(r,c);
+      line.push(k);
+      if (!marks[k]) ok = false;
+    }
+    if (ok) wins.push(line);
+  }
+  // cols
+  for (let c=0;c<GRID_SIZE;c++) {
+    const line = [];
+    let ok = true;
+    for (let r=0;r<GRID_SIZE;r++) {
+      const k = idx(r,c);
+      line.push(k);
+      if (!marks[k]) ok = false;
+    }
+    if (ok) wins.push(line);
+  }
+  // diag TL-BR
+  {
+    const line = [];
+    let ok = true;
+    for (let i=0;i<GRID_SIZE;i++) {
+      const k = idx(i,i);
+      line.push(k);
+      if (!marks[k]) ok = false;
+    }
+    if (ok) wins.push(line);
+  }
+  // diag TR-BL
+  {
+    const line = [];
+    let ok = true;
+    for (let i=0;i<GRID_SIZE;i++) {
+      const k = idx(i, GRID_SIZE-1-i);
+      line.push(k);
+      if (!marks[k]) ok = false;
+    }
+    if (ok) wins.push(line);
+  }
+  return wins;
+}
+
+function render() {
+  const state = loadState();
+  const gridEl = document.getElementById("grid");
+  gridEl.innerHTML = "";
+  state.card.forEach((label, i) => {
+    const div = document.createElement("div");
+    div.className = "sq";
+    div.textContent = label;
+    if (label === "FREE SPACE") div.classList.add("free");
+    if (state.marks[i]) div.classList.add("active");
+    div.addEventListener("click", () => {
+      // keep free space always marked
+      if (i === 12) return;
+      state.marks[i] = !state.marks[i];
+      saveState(state);
+      render();
+    });
+    gridEl.appendChild(div);
+  });
+
+  // win highlight
+  const wins = computeWins(state.marks);
+  const status = document.getElementById("status");
+  status.classList.remove("win");
+  status.textContent = "NO BINGO YET";
+
+  // clear line highlights
+  [...gridEl.children].forEach(ch => ch.classList.remove("winLine"));
+
+  if (wins.length) {
+    status.classList.add("win");
+    status.textContent = "BINGO!";
+    // highlight all winning lines
+    wins.flat().forEach(i => {
+      const el = gridEl.children[i];
+      if (el) el.classList.add("winLine");
+    });
+  }
+}
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  const state = loadState();
+  state.marks = Array(25).fill(false);
+  state.marks[12] = true;
+  saveState(state);
+  render();
+});
+
+document.getElementById("newBtn").addEventListener("click", () => {
+  const state = defaultState();
+  saveState(state);
+  render();
+});
+
+document.getElementById("shareBtn").addEventListener("click", async () => {
+  const text = "PCPD Bingo: open the link your host provides, then click squares to mark them. Center is FREE SPACE. First row/column/diagonal wins.";
+  try {
+    await navigator.clipboard.writeText(text);
+    alert("Share text copied!");
+  } catch(e) {
+    prompt("Copy this text:", text);
+  }
+});
+
+render();
+</script>
+</body>
+</html>
